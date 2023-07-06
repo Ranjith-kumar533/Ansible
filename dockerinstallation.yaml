@@ -1,0 +1,63 @@
+---
+- hosts: Docker
+  become: yes
+  remote_user: ubuntu
+  become_user: root
+  vars:
+      user: ubuntu
+      version: $(. /etc/os-release && echo "$VERSION_CODENAME")
+      arch: $(dpkg --print-architecture)
+  tasks:
+    - name: Updating repository and installing pre-requisites
+      apt:
+        name: "{{ item }}"
+        state: latest
+      loop:
+        - '*'
+        - ca-certificates
+        - curl
+        - gnupg
+
+    - name: Changing permission for the keyrings directory
+      file:
+        path: /etc/apt/keyrings
+        mode: '0755'
+
+    - name: Download and exporting docker gpg key
+      get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /tmp/docker.gpg
+
+    - name: Dearmoring the gpg key and storing.
+      command: gpg --yes --dearmor -o /etc/apt/keyrings/docker.gpg /tmp/docker.gpg
+
+    - name: Changing file ownership of the docker.gpg
+      file:
+        path: /etc/apt/keyrings/docker.gpg
+        mode: '0444'
+
+    - name: Adding repository
+      apt_repository:
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu jammy stable"
+        state: present  
+
+    - name: Updating repository and installing docker binaries
+      apt:
+        name: "{{ item }}"
+        state: latest
+      loop:
+        - '*'
+        - docker-ce
+        - docker-ce-cli
+        - containerd.io
+        - docker-buildx-plugin 
+        - docker-compose-plugin
+
+    - name: Post installations steps
+      user:
+        name: "{{ user }}"
+        group: docker
+    
+    - name: Initiating new group docker
+      command: newgrp docker
+      become: false
